@@ -1,0 +1,7 @@
+eventID,Cell Type,Center.x,Center.y,Radius,Slice,Frame,Size,Dilation,Orientation
+1,Mother,265,157,14,6,30,89.65,1.4,130
+1,Daughter1,254,146,22.5471,6,31,73.35,1.2,160
+1,Daughter2,301,176,14,6,31,48.9,1.6,110
+2,Mother,140,161,14,7,55,97.8,1,130
+2,Daughter1,125,130,14,7,56,48.9,2.6,160
+2,Daughter2,159,148,12.7273,7,56,24.45,4.2,170
