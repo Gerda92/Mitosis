@@ -29,12 +29,13 @@ void addFeature(string type, Mat fmat, int &findex, int index, int dim,
 		}
 		findex++; return;
 	}
-	for(int i = 0; i < fmat.cols; i++)
-		for(int j = 0; j < fmat.rows; j++)
+	for(int i = 0; i < fmat.rows; i++)
+		for(int j = 0; j < fmat.cols; j++)
+		
 			if (fmat.type() == 5)
-				features[(i*fmat.rows+j)*dim+findex] = fmat.at<float>(Point(i, j));
+				features[(i*fmat.cols+j)*dim+findex] = fmat.at<float>(Point(i, j));
 			else
-				features[(i*fmat.rows+j)*dim+findex] = fmat.at<uchar>(Point(i, j));
+				features[(i*fmat.cols+j)*dim+findex] = fmat.at<uchar>(Point(i, j));
 	findex++;
 }
 
@@ -65,158 +66,12 @@ void preparePatch(Event e, float size_range, Mat &image, Mat &patch, int &event_
 
 }
 
-void extractFeatures(Event e, Mat templ, Mat mask, int index, int dim, vector<float> &features) {
+void extractFeatures(string type, Mat image, int &index,
+					 Mat templ, Mat mask, Gerda::Range<float> size, Gerda::Range<float> angle,
+//					 HOGDescriptor hog, Size winStride,
+					 int dim, vector<float>&features, bool visualize = false) {
 
-	cout<<index<<endl;
-	
-	//if (index != 10) return;
-
-	Mat image = e.loadImage();
-	float resize_coeff = target_width*1.0/image.cols;
-
-	// resize to standard resolution
-	resize(image, image, Size(image.cols*resize_coeff, image.rows*resize_coeff));
-	e.resize(resize_coeff);
-
-	int event_size = max(e.size, e.dilation*e.size);
-
-	// maximual size of template to apply
-	//int max_size = event_size*1.2;
-	float size_range = 0.1;
-
-	Mat patch;
-
-	// initial patch extraction, before rotation
-	int max_size1 = min(image.rows, image.cols)/2;
-	safePatchExtraction(image, Rect(e.coordinates.x - max_size1/2, e.coordinates.y - max_size1/2,
-		max_size1, max_size1), patch);
-
-	rotate(patch, -e.orientation, patch);
-
-	// size after rotation
-	int max_size2 = event_size*(1+size_range)+1;
-	safePatchExtraction(patch, Rect(patch.cols/2 - max_size2/2, patch.rows/2 - max_size2/2,
-		max_size2, max_size2), patch);
-
-	int final_res = 50;
-	resize(patch, patch, Size(final_res, final_res));
-
-	imwrite("res/"+to_string(index)+".png", patch);
-
-	// Start extracting features
-	// feature counter
-	int findex = 0;
-
-	// extract template matching results
-
-	//float smallest_size = final_res/1.2*0.8;
-	//Gerda::Range<float> size(smallest_size, final_res+1, (final_res-smallest_size)/4);
-
-	float smallest_size = final_res/(1+size_range)*(1-size_range);
-	//cout<<smallest_size<<" "<<final_res<<endl;
-	Gerda::Range<float> size(smallest_size, final_res+1, (final_res-smallest_size)/2);
-	Gerda::Range<float> dil(0.2, 1.1, 0.1);
-	Gerda::Range<float> angle(90, 90, 10);
-	
-	vector<Mat> bins;
-
-	Mat redChannel;
-	getChannel(patch, 2, redChannel);
-
-	templateMatching(redChannel, templ, mask, size, dil, angle, bins, 1);
-
-	int shift_correction = final_res/10;
-	Rect center(patch.cols/2 - shift_correction, patch.rows/2 - shift_correction,
-		shift_correction*2, shift_correction*2);
-
-	Mat overlay(patch.size(), CV_8UC1, Scalar(0));
-	rectangle(overlay, center, Scalar(255, 255, 255));
-	imwrite("res/"+to_string(index)+"_center.png", redChannel+overlay);
-
-	float glob_max = -1; int maxi;
-	for(int i = 0; i < bins.size(); i++) {
-
-		imwrite("res/"+to_string(index)+"_"+to_string(i)+".png", bins[i]*255);
-		double min, max;
-		//cout<<bins[i](center)<<endl;
-		cv::minMaxLoc(bins[i](center), &min, &max);
-		if (glob_max < max) { glob_max = max; maxi = i;}
-		//features.push_back(max);
-		addFeature(max, findex, index, dim, features);
-	}
-
-	Mat overlay2(patch.size(), CV_8UC3, Scalar(0, 0, 0));
-	rectangle(overlay2, center, Scalar(0, 255, 0));
-	Mat best;
-	drawSingleChannel(bins[maxi]*255, overlay2, best);
-	imwrite("res/"+to_string(index)+"_"+to_string(maxi)+".png", best);
-
-	float green_mean_center = mean(patch(center))[1];
-	//features.push_back(green_mean_center);
-	addFeature(green_mean_center, findex, index, dim, features);
-
-	Scalar means_over_patch = mean(patch);
-	// green
-	addFeature(means_over_patch[1], findex, index, dim, features);
-	// red
-	addFeature(means_over_patch[2], findex, index, dim, features);
-
-	// Mean of green inside cell. Taking best shape of template-matching
-	float best_dil = dil.min+dil.interval*maxi;
-	Mat transformed_mask;
-	transform(mask, final_res/(1+size_range)*0.8, best_dil, 90, transformed_mask);
-	Mat patch_mask = Mat::zeros(patch.size(), CV_8UC1);
-	copyToCenter(patch_mask, transformed_mask);
-	imwrite("res/"+to_string(index)+"_best_mask.png", patch_mask*255);
-
-	//cout<<oneChannelToThree(patch_mask).type()<<endl;
-	//Mat test = oneChannelToThree(patch_mask);
-	//test.convertTo(test, CV_8U);
-	Scalar inside_means = mean(patch, patch_mask);
-	//cout<<"Inside mean: "<<inside_means<<endl;
-	// green
-	imwrite("res/"+to_string(index)+"_"+to_string(findex)+".png", patch_mask*inside_means[1]*5);
-	addFeature(inside_means[1], findex, index, dim, features);
-	// red
-	imwrite("res/"+to_string(index)+"_"+to_string(findex)+".png", patch_mask*inside_means[2]*5);
-	addFeature(inside_means[2], findex, index, dim, features);
-	
-	// Grid means green
-	vector<float> piece_means_green, piece_means_red;
-	int npieces = 3;
-	meanOfGrid(patch, 1, npieces, piece_means_green);
-	Mat pieces_vis;
-	plotMeandOfGrid(patch.size(), npieces, piece_means_green, pieces_vis);
-	for(int i = 0; i < npieces*npieces; i++) addFeature(piece_means_green[i], findex, index, dim, features);
-	imwrite("res/"+to_string(index)+"_"+to_string(findex)+".png", pieces_vis);
-
-	// Grid means red
-	meanOfGrid(patch, 2, npieces, piece_means_red);
-	plotMeandOfGrid(patch.size(), npieces, piece_means_red, pieces_vis);
-	for(int i = 0; i < npieces*npieces; i++) addFeature(piece_means_red[i], findex, index, dim, features);
-	imwrite("res/"+to_string(index)+"_"+to_string(findex)+".png", pieces_vis);
-
-}
-
-void extractFeatures(vector<Event> events, int &dim, vector<float> &features) {
-	features = vector<float>();
-	vector<float> sample1;
-
-	Mat templ, mask;
-	templ = imread((boost::format("templates/template%d.png") % 5).str(), 0);
-	mask = imread((boost::format("templates/mask%d.png") % 5).str(), 0)/255;
-	//mask = Mat::ones(templ.size(), CV_8UC1);
-
-	extractFeatures(events[0], templ, mask, 0, 0, sample1);
-	dim = sample1.size();
-	features = vector<float>(dim*events.size());
-	for(int i = 0; i < events.size(); i++) {
-		extractFeatures(events[i], templ, mask, i, dim, features);
-	}
-}
-
-void extractFeatures(string type, Mat image, int index, Mat templ, Mat mask, Gerda::Range<float> size, Gerda::Range<float> angle,
-					 int dim, vector<float>&features) {
+	if (visualize) imwrite("features/"+to_string(index)+".png", image);
 
 	// start counting features;
 	int findex = 0;
@@ -234,7 +89,11 @@ void extractFeatures(string type, Mat image, int index, Mat templ, Mat mask, Ger
 	Gerda::Range<float> dil(0.2, 1.1, 0.1);
 	vector<Mat> bins;
 	templateMatching(redChannel, templ, mask, size, dil, angle, bins, 1);
-	for(Mat f : bins) addFeature(type, f, findex, index, dim, features, shift_correction);
+	for(Mat f : bins) {
+		addFeature(type, f, findex, index, dim, features, shift_correction);
+		if (visualize)
+			imwrite((boost::format("features/%d_%d.png") % index % findex).str(), f*255);
+	}
 
 	// extract green channel means
 
@@ -273,12 +132,59 @@ void extractFeatures(string type, Mat image, int index, Mat templ, Mat mask, Ger
 	GaussianBlur(redChannel, red_Gaussian2, Size(gauss_patch_size, gauss_patch_size), patch_size/2, patch_size/2);
 	addFeature(type, red_Gaussian2, findex, index, dim, features);
 
+	/*
 	vector<Mat> green_blocks, red_blocks;
 	meanOfGridLarge(greenChannel, patch_size, 3, green_blocks);
 	for(Mat f : green_blocks) addFeature(type, f, findex, index, dim, features);
 	meanOfGridLarge(redChannel, size.max, 3, red_blocks);
 	for(Mat f : red_blocks) addFeature(type, f, findex, index, dim, features);
+	*/
 
+	// prepare image
+	Mat im_hog;
+	GaussianBlur(redChannel, im_hog, Size(gauss_patch_size, gauss_patch_size), patch_size/30.0, patch_size/30.0);
+	//medianBlur(redChannel, im_hog, 11);
+	//if (visualize)
+	//	imwrite((boost::format("features/%d_%d.png") % index % findex).str(), im_hog);
+
+
+	HOGDescriptor hog;
+	Size winStride = Size(1, 1);
+
+	int nblocks = 5;
+	int hog_patch_size = int(size.max)/nblocks*nblocks;
+
+	hog.nbins = 9;
+	
+	
+	//hog.blockStride = hog.blockSize;
+	hog.winSize = Size(hog_patch_size, hog_patch_size);
+	hog.cellSize = Size(hog_patch_size/nblocks, hog_patch_size/nblocks);
+	hog.blockSize = hog.winSize;
+	hog.L2HysThreshold = 0.2;
+	hog.winSigma = 100000;
+
+	vector<float> ders;
+	hog.compute(im_hog, ders, winStride, Size(0, 0));
+	vector<Mat> feat;
+	derVec2Mat(image.size(), winStride, hog, ders, feat);
+	for(Mat f : feat) addFeature(type, f, findex, index, dim, features);
+
+	if (visualize) {
+		vector<float> fvect = getHOGAtPoint(image.size(), winStride, hog, ders,
+			Point(image.cols/2, image.rows/2));
+		float scaling = 10;
+		Mat canvas(image.rows*scaling, image.cols*scaling, CV_8UC3, Scalar(0, 0, 0));
+		drawHOGDescriptor(canvas, hog, Point(image.cols/2, image.rows/2), fvect, scaling);
+		//cout<<(boost::format("features/%d_%d.png") % index % findex).str()<<endl;
+		Mat resized;
+		resize(im_hog, resized, Size(image.cols*scaling, image.rows*scaling));
+		cvtColor(resized, resized, COLOR_GRAY2RGB);
+		imwrite((boost::format("features/%d_%d.png") % index % findex).str(),
+			resized+canvas);
+	}
+
+	index++;
 }
 
 
@@ -317,31 +223,64 @@ void extractFeaturesSimple(string type, Mat image, int index, Mat templ, Mat mas
 }
 
 
-void extractFeaturesNew(vector<Event> events, int &dim, vector<float> &features) {
+void extractFeaturesNew(vector<Event> events, int &dim, vector<float> &features, bool flip = false) {
 	features = vector<float>();
-	vector<float> sample1;
-
+	
+	// Load template and mask
 	Mat templ, mask;
-	templ = imread((boost::format("templates/template%d.png") % 1).str(), 0);
-	//mask = imread((boost::format("templates/mask%d.png") % 5).str(), 0)/255;
-	mask = Mat::ones(templ.size(), CV_8UC1);
+	templ = imread((boost::format("templates/template%d.png") % 5).str(), 0);
+	mask = imread((boost::format("templates/mask%d.png") % 5).str(), 0)/255;
+	//mask = Mat::ones(templ.size(), CV_8UC1);
 
-	extractFeaturesSimple("training", events[0].loadImage(), 0, templ, mask,
+	// Determine number of features
+	vector<float> sample1;
+	int zero = 0;
+	extractFeatures("training", to3Channel(templ), zero, templ, mask,
 		Gerda::Range<float>(15,15,5), Gerda::Range<float>(5,5,5), 0, sample1);
 	dim = sample1.size();
-	features = vector<float>(dim*events.size());
+
+	// If flipping is on, x4 feature size
+	if (flip)
+		features = vector<float>(dim*(events.size()*4));
+	else
+		features = vector<float>(dim*events.size());
+
+	// Index of a training sample
+	int idx = 0;
+
 	for(int i = 0; i < events.size(); i++) {
-		cout<<i<<endl;
+
+		cout<<i<<'\r'<<flush;
+
+		// Extract patch
 		Mat image, patch;
 		float size_range = 0.2; int event_size;
 		preparePatch(events[i], size_range, image, patch, event_size);
 
+		// Define size andangle range
 		float smallest_size = patch.cols*1.0/(1+size_range)*(1-size_range);
 
 		Gerda::Range<float> size(smallest_size, patch.cols+1, (patch.cols-smallest_size)/4);
 		Gerda::Range<float> angle(80, 100, 10);
-		extractFeaturesSimple("training", patch, i, templ, mask, size, angle, dim, features);
+
+		// Extract features from unflipped
+		extractFeatures("training", patch, idx, templ, mask, size, angle, dim, features, true);
+		
+		//imwrite("positives/"+to_string(idx)+".png", patch);
+		
+		// Flip
+		if (flip) {
+			for(int c = -1; c <= 1; c++) {
+
+				Mat flipped;
+				cv::flip(patch, flipped, c);
+				
+				extractFeatures("training", flipped, idx, templ, mask, size, angle, dim, features, true);
+
+			}
+		}
 	}
+	cout<<endl;
 }
 
 void traverseMovie(Movie movie) {
@@ -431,7 +370,10 @@ void quickEventExtract(Movie movie, int dim, C classifier, string new_folder) {
 				
 					// Features extraction
 					vector<float> features(rotated.cols*rotated.rows*dim);
-					extractFeaturesSimple("testing", rotated, t, templ, mask,
+					//extractFeaturesSimple("testing", rotated, t, templ, mask,
+					//	Gerda::Range<float>(s, s, 10), Gerda::Range<float>(0, 0, 10), dim, features);
+
+					extractFeatures("testing", rotated, t, templ, mask,
 						Gerda::Range<float>(s, s, 10), Gerda::Range<float>(0, 0, 10), dim, features);
 
 					// Classification
@@ -446,7 +388,7 @@ void quickEventExtract(Movie movie, int dim, C classifier, string new_folder) {
 							//circle(image, position, s/2, Scalar(255, 255, 255));
 
 							// Event position
-							vector<Point2f> position(1, Point2f(i/rotated.rows, i%rotated.rows));
+							vector<Point2f> position(1, Point2f(i%rotated.cols, i/rotated.cols));
 
 							// Rotating back
 							Mat rot_mat = getRotationMatrix2D(Point(rotated.cols/2, rotated.rows/2), -a, 1.0);
@@ -595,14 +537,20 @@ void extractCells(Mat image, int dim, const Forest<F, MyAggregator> forest) {
 }
 
 void writeFeaturesToFile(int nfiles, string files[], int labels[], string filename) {
-	createFile(filename);
+	
 	for(int i = 0; i < nfiles; i++) {
+		cout<<files[i]<<endl;
 		vector<Event> events;
 		readAnnotation(files[i], events);
 		int dim; vector<float> feat;
-		extractFeaturesNew(events, dim, feat);
+		if (labels[i] == 1)
+			extractFeaturesNew(events, dim, feat, true);
+		else
+			extractFeaturesNew(events, dim, feat, true);
 		vector<int> lab(feat.size()/dim, labels[i]);
-		writeToCSV(dim, feat, lab, filename);
+		string new_file = "f"+files[i];
+		//createFile(new_file);
+		writeToCSV(dim, feat, lab, new_file, false);
 	}
 }
 

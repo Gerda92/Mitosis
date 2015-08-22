@@ -19,6 +19,9 @@ void template_matching_test();
 
 int main(int argc, char** argv) {
 
+	//extractRandom(Movie::getMovies(), 1000, 10, "random_mothers_1000.csv", "random_daughters.csv");
+	//multiply_positive("positive_mothers.csv", "extended_mothers_moving.csv");
+
 	//reviseAnnotation(Movie::getMovies()[0], "classified tm/class.csv", "classified tm/");
 
 	//template_matching_test();
@@ -46,12 +49,20 @@ int main(int argc, char** argv) {
 
 	return 0;
 	*/
-	string annotations[] = {"positive_mothers.csv", "handcrafted_negative.csv", "random_mothers.csv"};
-	//string annotations[] = {"positive_mothers.csv"};
+	//string annotations[] = {"positive_mothers.csv", "handcrafted_negative.csv", "random_mothers.csv"};
+	//string annotations[] = {"positive_mothers.csv", "extended_mothers.csv"};
 	//string annotations[] = {"random_mothers.csv"};
-	int labs[] = {1, 0, 0};
+	//string annotations[] = {"positive_mothers.csv"};
+	//string annotations[] = {"extended_mothers_moving.csv"};
+	//string annotations[] = {"random_mothers_1000.csv"};
+	//int labs[] = {1, 0, 0};
+	//int labs[] = {1, 1};
 	//int labs[] = {1};
-	//writeFeaturesToFile(sizeof(labs)/sizeof(int), annotations, labs, "simple.csv");
+	string annotations[] = {"positive_mothers.csv", "extended_mothers_moving.csv",
+		"handcrafted_negative.csv", "random_mothers.csv", "random_mothers_1000.csv"};
+	int labs[] = {1, 1, 0, 0, 0};
+	_mkdir("features"); _mkdir("positives");
+	writeFeaturesToFile(sizeof(labs)/sizeof(int), annotations, labs, "great_set.csv");
 	//return 0;
 	
 	int dim; vector<float> features; vector<int> labels; 

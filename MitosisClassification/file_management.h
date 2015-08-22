@@ -160,75 +160,6 @@ void getTemplate(int n, Mat &templ, Mat &mask) {
 	mask = imread((boost::format("templates/mask%d.png") % n).str(), 0)/255;
 }
 
-/*
-*	ANNOTATION REORGANIZING AND CREATING
-*/
-
-void separateMothersFromDaughters(string file, string file_mother, string file_daughter) {
-	vector<Event> events;
-	readAnnotation("E:/IDP/annotations/positive samples/training.csv", events);
-
-	Event().writeHeaderToFileExtended(file_mother);
-	Event().writeHeaderToFileExtended(file_daughter);
-
-	for(int i = 0; i < events.size(); i++) {
-		if (events[i].cell_type == "Mother")
-			events[i].writeEventToFileExtended(file_mother);
-		else
-			events[i].writeEventToFileExtended(file_daughter);
-	}
-}
-
-void extractRandom(vector<Movie> movies, int m, int d, string file_mother, string file_daughter) {
-	srand (time(NULL));
-
-	Event().writeHeaderToFileExtended(file_mother);
-	Event().writeHeaderToFileExtended(file_daughter);
-
-	string cells[] = {"Mother", "Daughter1", "Daughter2"};
-
-	for(int i = 0; i < m+d; i++) {
-		int rand_movie = i%movies.size();
-		int rand_z = rand()%(movies[rand_movie].nslices - 5) + 3;
-		int rand_t = rand()%movies[rand_movie].nframes + 1;
-		Mat image = imread(movies[rand_movie].getPath(rand_z, rand_t));
-
-		float resize_coeff = target_width*1.0/image.cols;
-		resize(image, image, Size(image.cols*resize_coeff, image.rows*resize_coeff));
-
-		Mat mask;
-		extractCryptMask(image, mask);
-		int randx, randy;
-		int size = rand()%60 + 20; // between 20 and 80, calculated from positive samples
-		int j = 0;
-		while(true) {
-			randx = rand()%(image.cols-size-20) + size/2+10;
-			randy = rand()%(image.rows-size-20) + size/2+10;
-			if (mask.at<uchar>(randy, randx) > 0) break;
-			j++;
-			if (j > 15) break;
-		}
-		int orientation = rand()%360;
-		string cell_type;
-		if (i < m) {cell_type = "Mother";} else {cell_type = "Daughter1";}
-
-		Mat overlay(image.size(), CV_8UC3, Scalar(0,0,0));
-		circle(overlay, Point(randx, randy), 3, Scalar(255, 255, 255));
-		imwrite("rand/"+to_string(i)+".png", image+overlay);
-		imwrite("rand/"+to_string(i)+"mask.png", mask);
-
-		Event e = Event(i, rand_movie, cell_type,
-			Point3f(randx, randy, 0), rand_z, rand_t, size, 1, orientation);
-
-		e.resize(1/resize_coeff);
-		
-
-		if (cell_type == "Mother")
-			e.writeEventToFileExtended(file_mother);
-		else
-			e.writeEventToFileExtended(file_daughter);
-	}
-}
 
 /*
 *	REFINE ANNOTATION
@@ -413,6 +344,7 @@ void recognizeSizes(string folder_name, string series_name, vector<Event> events
 
 }
 
+// Group events in terms of proximity
 vector<Event> reduceEvents(vector<Event> events, float radius, vector<float> prob) {
 	vector<vector<int>> bags;
 	for(int i = 0; i < events.size(); i++) {
@@ -437,6 +369,122 @@ vector<Event> reduceEvents(vector<Event> events, float radius, vector<float> pro
 		most_prob[b] = events[max_i];
 	}
 	return most_prob;
+}
+
+
+
+/*
+*	ANNOTATION REORGANIZING AND CREATING
+*/
+
+void separateMothersFromDaughters(string file, string file_mother, string file_daughter) {
+	vector<Event> events;
+	readAnnotation("E:/IDP/annotations/positive samples/training.csv", events);
+
+	Event().writeHeaderToFileExtended(file_mother);
+	Event().writeHeaderToFileExtended(file_daughter);
+
+	for(int i = 0; i < events.size(); i++) {
+		if (events[i].cell_type == "Mother")
+			events[i].writeEventToFileExtended(file_mother);
+		else
+			events[i].writeEventToFileExtended(file_daughter);
+	}
+}
+
+void extractRandom(vector<Movie> movies, int m, int d, string file_mother, string file_daughter) {
+	srand (time(NULL));
+
+	Event().writeHeaderToFileExtended(file_mother);
+	Event().writeHeaderToFileExtended(file_daughter);
+
+	string cells[] = {"Mother", "Daughter1", "Daughter2"};
+
+	for(int i = 0; i < m+d; i++) {
+		cout<<"Random: "<<i<<endl;
+		int rand_movie = i%movies.size();
+		int rand_z = rand()%3 + 4;
+		int rand_t = rand()%movies[rand_movie].nframes + 1;
+		Mat image = imread(movies[rand_movie].getPath(rand_z, rand_t));
+
+		float resize_coeff = target_width*1.0/image.cols;
+		resize(image, image, Size(image.cols*resize_coeff, image.rows*resize_coeff));
+
+		Mat mask;
+		extractCryptMask(image, mask);
+		int randx, randy;
+		int size = rand()%60 + 20; // between 20 and 80, calculated from positive samples
+		int j = 0;
+		while(true) {
+			randx = rand()%(image.cols-size-20) + size/2+10;
+			randy = rand()%(image.rows-size-20) + size/2+10;
+			if (mask.at<uchar>(randy, randx) > 0) break;
+			j++;
+			if (j > 5) break;
+		}
+		if (j > 5) continue;
+		int orientation = rand()%360;
+		string cell_type;
+		if (i < m) {cell_type = "Mother";} else {cell_type = "Daughter1";}
+
+		Mat overlay(image.size(), CV_8UC3, Scalar(0,0,0));
+		circle(overlay, Point(randx, randy), 3, Scalar(255, 255, 255));
+		imwrite("rand/"+to_string(i)+".png", image+overlay);
+		imwrite("rand/"+to_string(i)+"mask.png", mask);
+
+		Event e = Event(i, rand_movie, cell_type,
+			Point3f(randx, randy, 0), rand_z, rand_t, size, 1, orientation);
+
+		e.resize(1/resize_coeff);
+		
+
+		if (cell_type == "Mother")
+			e.writeEventToFileExtended(file_mother);
+		else
+			e.writeEventToFileExtended(file_daughter);
+	}
+}
+
+void multiply_positive(string ann, string new_ann) {
+	vector<Event> events;
+	readAnnotation(ann, events);
+	Event().writeHeaderToFileExtended(new_ann);
+	for(int i = 0; i < events.size(); i++) {
+		Event e = events[i];
+		
+		int a_orig = e.orientation;
+		float s_orig = e.size;
+		Point3f p_orig = e.coordinates;
+
+		// rotate
+
+		for(int a =- 10; a <= 10; a+=10) {
+			e.orientation = a_orig + a;
+
+			// resize
+			
+			for(int s = 0; s < 3; s++) {
+				int size = rand()%30+85;
+				e.size = s_orig*size/100.0;
+
+				// displace
+				/*
+				for(int x = -5; x <= 5; x+=5) {
+					for(int y = -5; y <= 5; y+=5) {
+						e.coordinates = Point3f(p_orig.x + x, p_orig.y + y, p_orig.z);
+						e.writeEventToFileExtended(new_ann);
+					}
+				}
+				*/
+				for(int r = 0; r < 2; r++) {
+					int x = (rand()%3-1)*5;
+					int y = (rand()%3-1)*5;
+					e.coordinates = Point3f(p_orig.x + x, p_orig.y + y, p_orig.z);
+					e.writeEventToFileExtended(new_ann);				
+				}
+			}
+		}
+	}
 }
 
 

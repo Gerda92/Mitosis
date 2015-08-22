@@ -20,6 +20,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/ml.hpp>
+#include <opencv2/objdetect.hpp>
 
 #include <boost/format.hpp>
 /*
@@ -52,6 +53,8 @@ std::vector<std::string> split(std::string &s, char delim);
 void getChannel(Mat &src, int channel_index, Mat &channel);
 
 Mat toVisible(Mat img);
+
+Mat to3Channel(Mat image);
 
 // Draw with color on one-channel matrix
 void drawSingleChannel(Mat image, Mat canvas, Mat &result);

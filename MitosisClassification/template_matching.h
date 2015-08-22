@@ -458,7 +458,8 @@ void copyToCenter(Mat &b, Mat f) {
 
 void writeToCSV(int dim, vector<float> feat, vector<int> lab, string filename, bool cont = true) {
     ofstream f;
-	if (!cont) f.open(filename.c_str(), ios::out);
+	if (!cont)
+		f.open(filename.c_str(), ios::out);
 	f.close();
     f.open(filename.c_str(), ios::app);
 	for(int i = 0; i < feat.size(); i++) {
@@ -497,6 +498,69 @@ void vectorToMat(int dim, vector<float> v, Mat &m) {
 	}
 	imshow("df", m);
 	waitKey(0);
+}
+
+vector<float> getHOGAtPoint(Size imsize, Size winStride, HOGDescriptor hog, vector<float> &ders, Point p) {
+	int dsize = hog.getDescriptorSize();
+	int n = ders.size()/dsize;
+
+	// Dimensions of extracted HoG given window size and stride, image resolution
+	int ncols = (imsize.width - hog.winSize.width)/winStride.width + 1;
+	int nrows = (imsize.height - hog.winSize.height)/winStride.height + 1;
+	assert(n == ncols*nrows);
+
+	int col = (p.x - hog.winSize.width/2)/winStride.width;
+	int row = (p.y - hog.winSize.height/2)/winStride.height;
+
+	// If the point if off region where HoG was computed, return zeros (e.g. near the edges)
+	if (col < 0 || col > ncols - 1 || row < 0 || row > nrows - 1) return vector<float>(dsize, 0);
+
+	int index = row*ncols+col;
+	return vector<float>(ders.begin()+index*dsize, ders.begin()+index*dsize+dsize);
+}
+
+void derVec2Mat(Size imsize, Size winStride, HOGDescriptor hog,
+				vector<float> &ders, vector<Mat> &feat) {
+	int dsize = hog.getDescriptorSize();
+	feat = vector<Mat>(dsize);
+	for(int f = 0; f < dsize; f++) {
+		feat[f] = Mat::zeros(imsize, CV_32FC1);
+	}
+	for(int i = 0; i < imsize.height; i++) {
+		for(int j = 0; j < imsize.width; j++) {
+			vector<float> fvect = getHOGAtPoint(imsize, winStride, hog, ders, Point(j, i));
+			for(int f = 0; f < dsize; f++) {
+				feat[f].at<float>(Point(j, i)) = fvect[f];
+			}
+		}
+	}
+}
+
+void drawGrad(Mat &image, Point p, double radius, double angle) {
+	double angle_rad = (angle)/180.0*3.14;
+	int x = cos(angle_rad)*radius;
+	int y = sin(angle_rad)*radius;
+	line(image, p - Point(x, y),
+		p + Point(x, y), Scalar(255, 0, 255), 1);
+}
+
+void drawHOGDescriptor(Mat &image, HOGDescriptor hog, Point p, vector<float> desc, float resizing = 1) {
+	int block_cols = hog.winSize.width/hog.cellSize.width;
+	int block_rows = hog.winSize.height/hog.cellSize.height;
+	double scale = hog.cellSize.width*resizing;
+
+	assert(block_cols*block_rows*hog.nbins == hog.getDescriptorSize());
+
+	Point start = p - Point(hog.winSize.width/2.0, hog.winSize.height/2.0);
+	
+	for(int i = 0; i < block_rows; i++) {
+		for(int j = 0; j < block_cols; j++) {
+			Point cent = start + Point((j+.5)*hog.cellSize.width, (i+.5)*hog.cellSize.height);
+			for(int bin = 0; bin < hog.nbins; bin++) {
+				drawGrad(image, cent*resizing, desc[(j*block_rows+i)*hog.nbins+bin]*scale, 180/hog.nbins*bin);
+			}
+		}
+	}
 }
 
 

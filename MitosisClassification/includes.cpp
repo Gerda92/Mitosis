@@ -39,6 +39,15 @@ Mat toVisible(Mat img) {
 	return res;
 }
 
+Mat to3Channel(Mat image) {
+	Mat color[] = {image, image.clone(), image.clone()};
+			
+	Mat merged;
+	merge(color, 3, merged);
+	merged.convertTo(merged, CV_8UC3);
+	return merged;
+}
+
 void drawSingleChannel(Mat image, Mat canvas, Mat &result) {
 	Mat color[] = {image, image.clone(), image.clone()};
 			
